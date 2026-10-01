@@ -1,0 +1,9 @@
+General employees will scan QR code. When they
+do, they can either upload data to a linked 
+list, or end the linked list and insert the
+finalized linked list into a database.
+
+General consumers should be able to see the
+final list display in some format and see time
+stamps of when items were added to the linked
+list.
