@@ -1,0 +1,73 @@
+Imports:
+linkedlist
+
+class Object {
+    what
+    where
+    when
+
+    Object(what, where, when) {
+        this.what = what
+        this.where = where
+        this.when = when
+    }
+
+    getWhat() { return what }
+    getWhere() { return where }
+    getWhen() { return when }
+
+    display() {
+        print(what + ", " + where + ", " + when)
+    }
+}
+
+class Node {
+    data
+    next
+
+    Node(data) {
+        this.data = data
+        this.next = null
+    }
+}
+
+class LinkedList {
+    head = null
+
+    add(item) {
+        newNode = Node(item)
+        if (head == null) {
+            head = newNode
+        } else {
+            current = head
+            while (current.next != null) {
+                current = current.next
+            }
+            current.next = newNode
+        }
+    }
+
+    displayAll() {
+        current = head
+        while (current != null) {
+            current.data.display()
+            current = current.next
+        }
+    }
+}
+
+main() {
+    items = LinkedList()
+
+    while (user wants to add an item) {
+        what = input("Enter what:")
+        where = input("Enter where:")
+        when = input("Enter when:")
+        
+        item = Object(what, where, when)
+        items.add(item)
+    }
+
+    items.displayAll()
+}
+
