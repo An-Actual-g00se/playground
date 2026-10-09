@@ -1,0 +1,20 @@
+TRACEABILITY ROUTE APP - RUN COMMANDS
+
+Prerequisites: Node.js with npm, and Docker with Docker Compose.
+
+From the repository root, run:
+
+    cd "CSE120 playground/Linking Items"
+    docker compose up -d database
+    npm install
+    npm start
+
+Open the app at:
+
+    http://localhost:3000
+
+Run `npm install` the first time, or whenever package.json changes. The server applies schema.sql when it starts.
+
+To stop the app, press Ctrl+C in the terminal running npm start. To stop PostgreSQL while keeping its data, run from the app folder:
+
+    docker compose stop database

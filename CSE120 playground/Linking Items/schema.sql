@@ -26,10 +26,30 @@ CREATE TABLE IF NOT EXISTS route_stops (
 
 CREATE INDEX IF NOT EXISTS route_stops_location_idx ON route_stops(location_id);
 
+UPDATE locations
+SET name = 'Fresno Distribution Center', address = 'Downtown Fresno, CA', zip_code = '93721',
+    facility_type = 'Distribution center', latitude = 36.7378, longitude = -119.7871
+WHERE name = 'Central Distribution Center' AND address = '1201 2nd Ave, Seattle, WA';
+
+UPDATE locations
+SET name = 'Madera Agricultural Supply Depot', address = 'Downtown Madera, CA', zip_code = '93637',
+    facility_type = 'Warehouse', latitude = 36.9613, longitude = -120.0607
+WHERE name = 'Harbor Supply Depot' AND address = '2201 Alaskan Way, Seattle, WA';
+
+UPDATE locations
+SET name = 'Visalia Regional Medical Clinic', address = 'Downtown Visalia, CA', zip_code = '93291',
+    facility_type = 'Medical clinic', latitude = 36.3302, longitude = -119.2921
+WHERE name = 'Downtown Medical Clinic' AND address = '901 Boren Ave, Seattle, WA';
+
+UPDATE locations
+SET name = 'Bakersfield Operations Facility', address = 'Downtown Bakersfield, CA', zip_code = '93301',
+    facility_type = 'Operations facility', latitude = 35.3733, longitude = -119.0187
+WHERE name = 'Northside Operations Facility' AND address = '4500 Stone Way N, Seattle, WA';
+
 INSERT INTO locations (name, address, zip_code, facility_type, latitude, longitude)
 VALUES
-    ('Central Distribution Center', '1201 2nd Ave, Seattle, WA', '98101', 'Distribution center', 47.6082, -122.3371),
-    ('Harbor Supply Depot', '2201 Alaskan Way, Seattle, WA', '98121', 'Warehouse', 47.6117, -122.3486),
-    ('Downtown Medical Clinic', '901 Boren Ave, Seattle, WA', '98104', 'Medical clinic', 47.6089, -122.3295),
-    ('Northside Operations Facility', '4500 Stone Way N, Seattle, WA', '98103', 'Operations facility', 47.6612, -122.3421)
+    ('Fresno Distribution Center', 'Downtown Fresno, CA', '93721', 'Distribution center', 36.7378, -119.7871),
+    ('Madera Agricultural Supply Depot', 'Downtown Madera, CA', '93637', 'Warehouse', 36.9613, -120.0607),
+    ('Visalia Regional Medical Clinic', 'Downtown Visalia, CA', '93291', 'Medical clinic', 36.3302, -119.2921),
+    ('Bakersfield Operations Facility', 'Downtown Bakersfield, CA', '93301', 'Operations facility', 35.3733, -119.0187)
 ON CONFLICT (name, address) DO NOTHING;
