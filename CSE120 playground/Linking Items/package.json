@@ -1,0 +1,14 @@
+{
+  "name": "traceability-route-map",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PostgreSQL-backed locations and ordered OSRM routes displayed with Leaflet",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "pg": "^8.16.3"
+  }
+}
