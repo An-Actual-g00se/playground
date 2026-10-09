@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f3f6f2">
+    <title>Traceability Route Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Traceability Route Map home">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>Traceability<span class="brand-light"> / Routes</span></span>
+      </a>
+      <div class="system-status"><span class="status-dot"></span><span id="connection-status">Connecting to database</span></div>
+    </header>
+
+    <main class="workspace">
+      <aside class="control-panel" aria-label="Location and route controls">
+        <section class="panel-section route-section">
+          <div class="section-heading">
+            <div><p class="eyebrow">ROUTE PLANNER</p><h1>Build a route</h1></div>
+            <span class="step-count" id="stop-count">0 stops</span>
+          </div>
+          <label class="field-label" for="route-name">Route name</label>
+          <div class="route-name-row">
+            <input id="route-name" type="text" placeholder="e.g. Northbound delivery" maxlength="120">
+            <button class="primary-button" id="save-route" type="button" aria-label="Save route" title="Save route" disabled>Save route</button>
+          </div>
+          <div class="sequence-heading"><span>VISIT ORDER</span><span>Use arrows to reorder</span></div>
+          <ol class="stop-list" id="stop-list" aria-live="polite"></ol>
+          <p class="empty-sequence" id="sequence-empty">Add two or more locations below.</p>
+          <div class="route-library">
+            <label class="field-label" for="saved-routes">Saved routes</label>
+            <select id="saved-routes"><option value="">Choose a route</option></select>
+          </div>
+          <p class="feedback" id="route-feedback" role="status"></p>
+        </section>
+
+        <section class="panel-section location-section">
+          <div class="section-heading location-heading">
+            <div><p class="eyebrow">LOCATION DIRECTORY</p><h2>Facilities</h2></div>
+            <span class="location-count" id="location-count">0</span>
+          </div>
+          <div class="location-list" id="location-list" aria-live="polite"></div>
+          <details class="add-location">
+            <summary><span class="plus-icon" aria-hidden="true">+</span> Add a location</summary>
+            <form id="location-form" class="location-form">
+              <label class="field-label" for="location-name">Facility name</label>
+              <input id="location-name" name="name" required maxlength="120" placeholder="Northside depot">
+              <label class="field-label" for="location-address">Street address</label>
+              <input id="location-address" name="address" required maxlength="240" placeholder="123 Main St, Seattle, WA">
+              <div class="form-row">
+                <div><label class="field-label" for="location-zip">ZIP code</label><input id="location-zip" name="zipCode" required maxlength="20" placeholder="98101"></div>
+                <div><label class="field-label" for="location-type">Facility type</label><input id="location-type" name="facilityType" required maxlength="80" placeholder="Warehouse"></div>
+              </div>
+              <div class="form-row">
+                <div><label class="field-label" for="location-lat">Latitude</label><input id="location-lat" name="latitude" type="number" step="any" min="-90" max="90" required placeholder="47.6082"></div>
+                <div><label class="field-label" for="location-lon">Longitude</label><input id="location-lon" name="longitude" type="number" step="any" min="-180" max="180" required placeholder="-122.3371"></div>
+              </div>
+              <button class="secondary-button" type="submit">Save location</button>
+            </form>
+          </details>
+        </section>
+      </aside>
+
+      <section class="map-panel" aria-label="Facility and route map">
+        <div class="map-toolbar">
+          <div><span class="map-title" id="map-title">All facilities</span><span class="map-subtitle" id="map-subtitle">Select locations to plan a route</span></div>
+          <div class="map-legend"><span><i class="legend-dot facility-dot"></i>Facility</span><span><i class="legend-dot route-dot"></i>Route stop</span></div>
+        </div>
+        <div id="map" role="application" aria-label="Map of facilities and calculated routes"></div>
+        <div class="map-attribution-note">Routes via OSRM · Map data © OpenStreetMap · Tiles © CARTO</div>
+      </section>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

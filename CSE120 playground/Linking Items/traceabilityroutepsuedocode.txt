@@ -1,0 +1,90 @@
+TRACEABILITY ROUTE PSEUDOCODE
+
+DATA MODEL
+
+TABLE locations
+    id              primary key
+    name            text
+    address         text
+    zip_code        text
+    facility_type   text
+    latitude        decimal
+    longitude       decimal
+
+TABLE routes
+    id              primary key
+    name            text
+
+TABLE route_stops
+    route_id        references routes.id
+    location_id     references locations.id
+    stop_order      integer
+    primary key (route_id, location_id)
+    unique (route_id, stop_order)
+
+
+CREATE A ROUTE
+
+FUNCTION create_route(name, ordered_location_ids)
+    validate that the route name is present
+    validate that at least two locations were selected
+    validate that every selected location exists and has coordinates
+
+    begin database transaction
+        insert a row into routes and get its route_id
+
+        FOR each location_id in ordered_location_ids, starting at index 0
+            insert into route_stops:
+                route_id = new route_id
+                location_id = current location_id
+                stop_order = index + 1
+        END FOR
+    commit transaction
+
+    return route_id
+
+LOAD AND DISPLAY A ROUTE
+
+FUNCTION display_route(route_id)
+    route = load route name from routes where id = route_id
+    stops = load locations joined with route_stops
+            where route_stops.route_id = route_id
+            order by route_stops.stop_order ascending
+
+    IF fewer than two stops exist
+        show a message that the route needs at least two locations
+        return
+    END IF
+
+    FOR each stop
+        add a Leaflet marker at (stop.latitude, stop.longitude)
+        show the location name, address, zip code, and facility type in its popup
+        include stop_order in the marker label or popup
+    END FOR
+
+    coordinates = stops' coordinates converted to OSRM order (longitude, latitude)
+    request driving route from the configured OSRM endpoint using coordinates
+        request full route geometry in GeoJSON format
+
+    IF OSRM request succeeds and returns route geometry
+        draw the returned GeoJSON geometry as a Leaflet line
+        fit the map bounds to include all route stops and the route line
+    ELSE
+        show the ordered location markers and an error message
+    END IF
+
+    display the route name and stops in stop_order sequence
+END FUNCTION
+
+REORDER STOPS
+
+FUNCTION reorder_route(route_id, ordered_location_ids)
+    validate that the submitted locations are the route's existing stops
+
+    begin database transaction
+        update each route_stop.stop_order to match its position in ordered_location_ids
+    commit transaction
+
+    display_route(route_id)  // Reload in the new order and request updated OSRM geometry.
+
+
