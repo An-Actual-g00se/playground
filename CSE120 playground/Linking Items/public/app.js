@@ -1,10 +1,9 @@
 const map = L.map('map', { zoomControl: false }).setView([47.61, -122.337], 12);
 const osrmBaseUrl = 'https://router.project-osrm.org';
 L.control.zoom({ position: 'bottomright' }).addTo(map);
-L.tileLayer('map key', {
-  subdomains: 'abcd',
+L.tileLayer('/tiles/{z}/{x}/{y}.png', {
   maxZoom: 19,
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
 }).addTo(map);
 
 const locationsById = new Map();

@@ -5,11 +5,54 @@ const { Pool } = require('pg');
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
+const osmTileUrl = process.env.OSM_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const osmTileUserAgent = process.env.OSM_TILE_USER_AGENT ||
+  'TraceabilityRouteMap/1.0 (+https://github.com/An-Actual-g00se/playground)';
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgres://traceability:traceability@localhost:5432/traceability',
 });
 
 app.use(express.json({ limit: '32kb' }));
+app.get('/tiles/:zoom/:x/:y.png', async (request, response, next) => {
+  const { zoom, x, y } = request.params;
+  if (![zoom, x, y].every((value) => /^\d+$/.test(value))) {
+    return response.status(400).json({ error: 'Invalid tile coordinates.' });
+  }
+
+  const [zoomLevel, tileX, tileY] = [zoom, x, y].map(Number);
+  const tilesAtZoom = 2 ** zoomLevel;
+  if (zoomLevel > 19 || tileX >= tilesAtZoom || tileY >= tilesAtZoom) {
+    return response.status(400).json({ error: 'Tile coordinates are outside the supported range.' });
+  }
+
+  const referer = request.get('referer');
+  if (!referer) {
+    return response.status(400).json({ error: 'A browser Referer is required for OSM tile requests.' });
+  }
+
+  try {
+    const tileUrl = osmTileUrl
+      .replace('{z}', String(zoomLevel))
+      .replace('{x}', String(tileX))
+      .replace('{y}', String(tileY));
+    const headers = new Headers({ 'User-Agent': osmTileUserAgent, Referer: referer });
+    for (const headerName of ['if-none-match', 'if-modified-since']) {
+      const value = request.get(headerName);
+      if (value) headers.set(headerName, value);
+    }
+
+    const tileResponse = await fetch(tileUrl, { headers });
+    for (const headerName of ['cache-control', 'expires', 'etag', 'last-modified', 'content-type', 'retry-after', 'x-blocked']) {
+      const value = tileResponse.headers.get(headerName);
+      if (value) response.set(headerName, value);
+    }
+    response.status(tileResponse.status);
+    if (tileResponse.status === 304 || tileResponse.status === 204) return response.end();
+    response.send(Buffer.from(await tileResponse.arrayBuffer()));
+  } catch (error) {
+    next(error);
+  }
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/locations', async (request, response, next) => {
