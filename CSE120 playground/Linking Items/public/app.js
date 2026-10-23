@@ -10,6 +10,7 @@ const locationsById = new Map();
 const markersById = new Map();
 let locations = [];
 let selectedIds = [];
+const scheduleByLocationId = new Map();
 let activeRouteId = null;
 let routeLine;
 let routeRequestId = 0;
@@ -37,6 +38,50 @@ function escapeHtml(value) {
   })[character]);
 }
 
+function timestampToLocalInput(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  const pad = (part) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function localInputToTimestamp(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) throw new Error('Enter a valid arrival and departure date/time.');
+  return date.toISOString();
+}
+
+function formatPopupScheduleTime(value) {
+  if (!value) return 'Not set';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return 'Not set';
+  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function loadScheduleFromStops(stops) {
+  scheduleByLocationId.clear();
+  for (const stop of stops) {
+    scheduleByLocationId.set(Number(stop.id), {
+      arrivalLocal: timestampToLocalInput(stop.arrivalAt),
+      departureLocal: timestampToLocalInput(stop.departureAt),
+    });
+  }
+}
+
+function buildScheduledStops() {
+  return selectedIds.map((locationId) => {
+    const schedule = scheduleByLocationId.get(locationId) || {};
+    const arrivalAt = localInputToTimestamp(schedule.arrivalLocal);
+    const departureAt = localInputToTimestamp(schedule.departureLocal);
+    if (arrivalAt && departureAt && Date.parse(arrivalAt) > Date.parse(departureAt)) {
+      throw new Error('Arrival must be before or at departure for each stop.');
+    }
+    return { locationId, arrivalAt, departureAt };
+  });
+}
+
 async function request(url, options) {
   const response = await fetch(url, options);
   const body = await response.json().catch(() => ({}));
@@ -45,7 +90,12 @@ async function request(url, options) {
 }
 
 function popupContent(location) {
-  return `<strong>${escapeHtml(location.name)}</strong><br>${escapeHtml(location.address)}<br>${escapeHtml(location.zipCode)} · ${escapeHtml(location.facilityType)}`;
+  const locationId = Number(location.id);
+  const schedule = selectedIds.includes(locationId) ? scheduleByLocationId.get(locationId) : null;
+  const scheduleContent = schedule
+    ? `<br><br><strong>Route schedule (local time)</strong><br>Arrival: ${escapeHtml(formatPopupScheduleTime(schedule.arrivalLocal))}<br>Departure: ${escapeHtml(formatPopupScheduleTime(schedule.departureLocal))}`
+    : '';
+  return `<strong>${escapeHtml(location.name)}</strong><br>${escapeHtml(location.address)}<br>${escapeHtml(location.zipCode)} · ${escapeHtml(location.facilityType)}${scheduleContent}`;
 }
 
 function markerIcon(number) {
@@ -87,9 +137,18 @@ function renderStops() {
   elements.stopList.innerHTML = selectedIds.map((id, index) => {
     const location = locationsById.get(id);
     if (!location) return '';
+    const schedule = scheduleByLocationId.get(id) || { arrivalLocal: '', departureLocal: '' };
     return `<li class="stop-item">
       <span class="stop-number">${index + 1}</span>
       <span class="stop-name">${escapeHtml(location.name)}</span>
+      <div class="stop-schedule">
+        <label>Arrival
+          <input type="datetime-local" data-schedule-location="${id}" data-schedule-field="arrivalLocal" value="${escapeHtml(schedule.arrivalLocal)}" aria-label="Arrival date and time at ${escapeHtml(location.name)}">
+        </label>
+        <label>Departure
+          <input type="datetime-local" data-schedule-location="${id}" data-schedule-field="departureLocal" value="${escapeHtml(schedule.departureLocal)}" aria-label="Departure date and time at ${escapeHtml(location.name)}">
+        </label>
+      </div>
       <span class="stop-actions">
         <button type="button" data-move="${index}" data-direction="-1" aria-label="Move ${escapeHtml(location.name)} up" title="Move up" ${index === 0 ? 'disabled' : ''}>↑</button>
         <button type="button" data-move="${index}" data-direction="1" aria-label="Move ${escapeHtml(location.name)} down" title="Move down" ${index === selectedIds.length - 1 ? 'disabled' : ''}>↓</button>
@@ -169,7 +228,12 @@ elements.locationList.addEventListener('click', (event) => {
   const focusButton = event.target.closest('[data-focus]');
   if (addButton && !addButton.disabled) {
     const id = Number(addButton.dataset.add);
-    selectedIds = selectedIds.includes(id) ? selectedIds.filter((stopId) => stopId !== id) : [...selectedIds, id];
+    if (selectedIds.includes(id)) {
+      selectedIds = selectedIds.filter((stopId) => stopId !== id);
+      scheduleByLocationId.delete(id);
+    } else {
+      selectedIds = [...selectedIds, id];
+    }
     renderStops();
   }
   if (focusButton) {
@@ -179,6 +243,7 @@ elements.locationList.addEventListener('click', (event) => {
   }
 });
 
+// TODO: ARRIVAL/DEPARTURE SCHEDULE input/change handling belongs on this delegated stop-list listener.
 elements.stopList.addEventListener('click', (event) => {
   const moveButton = event.target.closest('[data-move]');
   const removeButton = event.target.closest('[data-remove]');
@@ -201,18 +266,36 @@ elements.stopList.addEventListener('click', (event) => {
   }
 });
 
+elements.stopList.addEventListener('input', (event) => {
+  const input = event.target.closest('[data-schedule-location][data-schedule-field]');
+  if (!input) return;
+
+  const locationId = Number(input.dataset.scheduleLocation);
+  const field = input.dataset.scheduleField;
+  if (!['arrivalLocal', 'departureLocal'].includes(field)) return;
+
+  const schedule = scheduleByLocationId.get(locationId) || { arrivalLocal: '', departureLocal: '' };
+  schedule[field] = input.value;
+  scheduleByLocationId.set(locationId, schedule);
+  const location = locationsById.get(locationId);
+  const marker = markersById.get(locationId);
+  if (location && marker) marker.setPopupContent(popupContent(location));
+});
+
 elements.saveRoute.addEventListener('click', async () => {
   elements.routeFeedback.textContent = '';
   try {
+    const stops = buildScheduledStops();
     if (activeRouteId) {
       await request(`/api/routes/${activeRouteId}/stops`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ locationIds: selectedIds }),
+        body: JSON.stringify({ stops }),
       });
       await loadRoutes();
       elements.savedRoutes.value = activeRouteId;
       const route = savedRoutes.find((item) => String(item.id) === String(activeRouteId));
+      loadScheduleFromStops(route.stops);
       drawStops(route.stops, route.name);
       elements.routeFeedback.textContent = 'Saved order updated.';
       return;
@@ -222,13 +305,15 @@ elements.saveRoute.addEventListener('click', async () => {
     const route = await request('/api/routes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, locationIds: selectedIds }),
+      body: JSON.stringify({ name, stops }),
     });
     await loadRoutes();
     activeRouteId = route.id;
     elements.savedRoutes.value = route.id;
     elements.routeName.value = name;
-    drawStops(selectedIds.map((id) => locationsById.get(id)), name);
+    const savedRoute = savedRoutes.find((item) => String(item.id) === String(route.id));
+    loadScheduleFromStops(savedRoute.stops);
+    drawStops(savedRoute.stops, name);
   } catch (error) {
     elements.routeFeedback.textContent = error.message;
   }
@@ -239,6 +324,7 @@ elements.savedRoutes.addEventListener('change', () => {
   activeRouteId = route?.id ?? null;
   if (route) {
     elements.routeName.value = route.name;
+    loadScheduleFromStops(route.stops);
     drawStops(route.stops, route.name);
     return;
   }
@@ -247,6 +333,7 @@ elements.savedRoutes.addEventListener('change', () => {
   if (routeLine) map.removeLayer(routeLine);
   routeLine = undefined;
   selectedIds = [];
+  scheduleByLocationId.clear();
   elements.routeName.value = '';
   renderStops();
   elements.mapTitle.textContent = 'All facilities';

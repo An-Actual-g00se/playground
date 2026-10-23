@@ -50,7 +50,7 @@ input::placeholder { color: #a5ada8; }
 .sequence-heading { display: flex; justify-content: space-between; margin: 20px 0 8px; color: #839089; font-size: 9px; font-weight: 700; }
 .sequence-heading span + span { font-weight: 500; text-transform: none; }
 .stop-list { display: grid; gap: 5px; padding: 0; margin: 0; list-style: none; }
-.stop-item { min-height: 36px; display: flex; align-items: center; gap: 9px; padding: 4px 6px; background: #f7f9f7; border-radius: 4px; }
+.stop-item { min-height: 36px; display: grid; grid-template-columns: 21px minmax(0, 1fr) auto; align-items: center; gap: 7px 9px; padding: 6px; background: #f7f9f7; border-radius: 4px; }
 .stop-number { width: 21px; height: 21px; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: var(--coral); border-radius: 50%; font-size: 10px; font-weight: 700; }
 .stop-name { flex: 1; overflow: hidden; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .stop-actions { display: flex; gap: 2px; }
@@ -58,6 +58,14 @@ input::placeholder { color: #a5ada8; }
 .stop-actions button:hover:not(:disabled) { color: var(--green-dark); background: #e8f2ed; }
 .stop-actions button:disabled { opacity: .3; cursor: default; }
 .stop-actions button:last-child { color: #a15b49; font-size: 18px; }
+
+.stop-number { grid-column: 1; grid-row: 1; }
+.stop-name { grid-column: 2; grid-row: 1; min-width: 0; }
+.stop-actions { grid-column: 3; grid-row: 1; }
+.stop-schedule { min-width: 0; grid-column: 2 / 4; grid-row: 2; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.stop-schedule label { min-width: 0; display: grid; gap: 4px; color: var(--muted); font-size: 9px; font-weight: 700; }
+.stop-schedule input { width: 100%; min-width: 0; height: 30px; padding: 0 6px; font-size: 10px; }
+
 .empty-sequence { margin: 0; padding: 11px; color: #89948e; background: #f7f9f7; border-radius: 4px; font-size: 11px; }
 .empty-sequence[hidden] { display: none; }
 .route-library { margin-top: 16px; }
@@ -114,4 +122,5 @@ input::placeholder { color: #a5ada8; }
   .map-toolbar { top: 8px; left: 8px; right: 8px; }
   .map-legend { gap: 7px; font-size: 8px; }
   .map-legend span { gap: 3px; }
+  .stop-schedule { grid-template-columns: minmax(0, 1fr); }
 }
