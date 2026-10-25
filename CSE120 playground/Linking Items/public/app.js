@@ -8,9 +8,9 @@ L.tileLayer('/tiles/{z}/{x}/{y}.png', {
 
 const locationsById = new Map();
 const markersById = new Map();
+const scheduleByLocationId = new Map();
 let locations = [];
 let selectedIds = [];
-const scheduleByLocationId = new Map();
 let activeRouteId = null;
 let routeLine;
 let routeRequestId = 0;
