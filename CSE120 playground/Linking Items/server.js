@@ -5,11 +5,54 @@ const { Pool } = require('pg');
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
+const osmTileUrl = process.env.OSM_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const osmTileUserAgent = process.env.OSM_TILE_USER_AGENT ||
+  'TraceabilityRouteMap/1.0 (+https://github.com/An-Actual-g00se/playground)';
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgres://traceability:traceability@localhost:5432/traceability',
 });
 
 app.use(express.json({ limit: '32kb' }));
+app.get('/tiles/:zoom/:x/:y.png', async (request, response, next) => {
+  const { zoom, x, y } = request.params;
+  if (![zoom, x, y].every((value) => /^\d+$/.test(value))) {
+    return response.status(400).json({ error: 'Invalid tile coordinates.' });
+  }
+
+  const [zoomLevel, tileX, tileY] = [zoom, x, y].map(Number);
+  const tilesAtZoom = 2 ** zoomLevel;
+  if (zoomLevel > 19 || tileX >= tilesAtZoom || tileY >= tilesAtZoom) {
+    return response.status(400).json({ error: 'Tile coordinates are outside the supported range.' });
+  }
+
+  const referer = request.get('referer');
+  if (!referer) {
+    return response.status(400).json({ error: 'A browser Referer is required for OSM tile requests.' });
+  }
+
+  try {
+    const tileUrl = osmTileUrl
+      .replace('{z}', String(zoomLevel))
+      .replace('{x}', String(tileX))
+      .replace('{y}', String(tileY));
+    const headers = new Headers({ 'User-Agent': osmTileUserAgent, Referer: referer });
+    for (const headerName of ['if-none-match', 'if-modified-since']) {
+      const value = request.get(headerName);
+      if (value) headers.set(headerName, value);
+    }
+
+    const tileResponse = await fetch(tileUrl, { headers });
+    for (const headerName of ['cache-control', 'expires', 'etag', 'last-modified', 'content-type', 'retry-after', 'x-blocked']) {
+      const value = tileResponse.headers.get(headerName);
+      if (value) response.set(headerName, value);
+    }
+    response.status(tileResponse.status);
+    if (tileResponse.status === 304 || tileResponse.status === 204) return response.end();
+    response.send(Buffer.from(await tileResponse.arrayBuffer()));
+  } catch (error) {
+    next(error);
+  }
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/locations', async (request, response, next) => {
@@ -50,6 +93,46 @@ app.post('/api/locations', async (request, response, next) => {
   }
 });
 
+function normalizeTimestamp(value, fieldName) {
+  if (value === null || value === undefined || value === '') return { value: null };
+  if (typeof value !== 'string' || !/(?:Z|[+-]\d{2}:\d{2})$/i.test(value)) {
+    return { error: `${fieldName} must be an ISO timestamp with a timezone.` };
+  }
+
+  const timestamp = new Date(value);
+  if (!Number.isFinite(timestamp.getTime())) {
+    return { error: `${fieldName} must be a valid date and time.` };
+  }
+  return { value: timestamp.toISOString() };
+}
+
+function normalizeRouteStops(stops) {
+  if (!Array.isArray(stops) || stops.length < 2) {
+    return { error: 'Provide at least two stops in visit order.' };
+  }
+
+  const seenLocationIds = new Set();
+  const normalizedStops = [];
+  for (const stop of stops) {
+    const locationId = Number(stop?.locationId);
+    if (!Number.isInteger(locationId) || locationId <= 0 || seenLocationIds.has(locationId)) {
+      return { error: 'Each stop must have a unique valid location ID.' };
+    }
+    seenLocationIds.add(locationId);
+
+    const arrival = normalizeTimestamp(stop.arrivalAt, 'Arrival');
+    const departure = normalizeTimestamp(stop.departureAt, 'Departure');
+    if (arrival.error) return arrival;
+    if (departure.error) return departure;
+    if (arrival.value && departure.value && Date.parse(arrival.value) > Date.parse(departure.value)) {
+      return { error: 'Arrival must be before or at departure for each stop.' };
+    }
+
+    normalizedStops.push({ locationId, arrivalAt: arrival.value, departureAt: departure.value });
+  }
+  return { stops: normalizedStops };
+}
+
 app.get('/api/routes', async (request, response, next) => {
   try {
     const result = await pool.query(`
@@ -63,7 +146,9 @@ app.get('/api/routes', async (request, response, next) => {
                  'facilityType', l.facility_type,
                  'latitude', l.latitude,
                  'longitude', l.longitude,
-                 'stopOrder', rs.stop_order
+                 'stopOrder', rs.stop_order,
+                 'arrivalAt', rs.arrival_at,
+                 'departureAt', rs.departure_at
                ) ORDER BY rs.stop_order) FILTER (WHERE l.id IS NOT NULL),
                '[]'::json
              ) AS stops
@@ -81,16 +166,14 @@ app.get('/api/routes', async (request, response, next) => {
 
 app.post('/api/routes', async (request, response, next) => {
   const name = typeof request.body.name === 'string' ? request.body.name.trim() : '';
-  const locationIds = request.body.locationIds;
-  if (!name || !Array.isArray(locationIds) || locationIds.length < 2 ||
-      locationIds.some((id) => !Number.isInteger(Number(id))) ||
-      new Set(locationIds.map(Number)).size !== locationIds.length) {
-    return response.status(400).json({ error: 'Provide a route name and at least two distinct locations in order.' });
+  const schedule = normalizeRouteStops(request.body.stops);
+  if (!name || schedule.error) {
+    return response.status(400).json({ error: schedule.error || 'Provide a route name.' });
   }
 
   const client = await pool.connect();
   try {
-    const ids = locationIds.map(Number);
+    const ids = schedule.stops.map((stop) => stop.locationId);
     const locations = await client.query(
       'SELECT id FROM locations WHERE id = ANY($1::bigint[])', [ids],
     );
@@ -103,10 +186,12 @@ app.post('/api/routes', async (request, response, next) => {
       'INSERT INTO routes (name) VALUES ($1) RETURNING id', [name],
     );
     const routeId = routeResult.rows[0].id;
-    for (const [index, locationId] of ids.entries()) {
+    for (const [index, stop] of schedule.stops.entries()) {
       await client.query(
-        'INSERT INTO route_stops (route_id, location_id, stop_order) VALUES ($1, $2, $3)',
-        [routeId, locationId, index + 1],
+        `INSERT INTO route_stops
+          (route_id, location_id, stop_order, arrival_at, departure_at)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [routeId, stop.locationId, index + 1, stop.arrivalAt, stop.departureAt],
       );
     }
     await client.query('COMMIT');
@@ -121,16 +206,14 @@ app.post('/api/routes', async (request, response, next) => {
 
 app.put('/api/routes/:routeId/stops', async (request, response, next) => {
   const routeId = Number(request.params.routeId);
-  const locationIds = request.body.locationIds;
-  if (!Number.isInteger(routeId) || !Array.isArray(locationIds) || locationIds.length < 2 ||
-      locationIds.some((id) => !Number.isInteger(Number(id))) ||
-      new Set(locationIds.map(Number)).size !== locationIds.length) {
+  const schedule = normalizeRouteStops(request.body.stops);
+  if (!Number.isInteger(routeId) || routeId <= 0 || schedule.error) {
     return response.status(400).json({ error: 'Provide the route stops in a valid order.' });
   }
 
   const client = await pool.connect();
   try {
-    const ids = locationIds.map(Number);
+    const ids = schedule.stops.map((stop) => stop.locationId);
     await client.query('BEGIN');
     const current = await client.query(
       'SELECT location_id, stop_order FROM route_stops WHERE route_id = $1 FOR UPDATE', [routeId],
@@ -146,14 +229,16 @@ app.put('/api/routes/:routeId/stops', async (request, response, next) => {
       'UPDATE route_stops SET stop_order = stop_order + $2 WHERE route_id = $1',
       [routeId, orderOffset],
     );
-    for (const [index, locationId] of ids.entries()) {
+    for (const [index, stop] of schedule.stops.entries()) {
       await client.query(
-        'UPDATE route_stops SET stop_order = $3 WHERE route_id = $1 AND location_id = $2',
-        [routeId, locationId, index + 1],
+        `UPDATE route_stops
+         SET stop_order = $3, arrival_at = $4, departure_at = $5
+         WHERE route_id = $1 AND location_id = $2`,
+        [routeId, stop.locationId, index + 1, stop.arrivalAt, stop.departureAt],
       );
     }
     await client.query('COMMIT');
-    response.json({ id: routeId, locationIds: ids });
+    response.json({ id: routeId, stops: schedule.stops });
   } catch (error) {
     await client.query('ROLLBACK');
     next(error);

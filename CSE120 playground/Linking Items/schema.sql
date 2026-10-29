@@ -20,9 +20,30 @@ CREATE TABLE IF NOT EXISTS route_stops (
     route_id BIGINT NOT NULL REFERENCES routes(id) ON DELETE CASCADE,
     location_id BIGINT NOT NULL REFERENCES locations(id),
     stop_order INTEGER NOT NULL CHECK (stop_order > 0),
+    arrival_at TIMESTAMPTZ,
+    departure_at TIMESTAMPTZ,
     PRIMARY KEY (route_id, location_id),
     CONSTRAINT route_stops_order_unique UNIQUE (route_id, stop_order)
 );
+
+ALTER TABLE route_stops
+    ADD COLUMN IF NOT EXISTS arrival_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS departure_at TIMESTAMPTZ;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'route_stops_arrival_before_departure'
+          AND conrelid = 'route_stops'::regclass
+    ) THEN
+        ALTER TABLE route_stops
+            ADD CONSTRAINT route_stops_arrival_before_departure
+            CHECK (arrival_at IS NULL OR departure_at IS NULL OR arrival_at <= departure_at);
+    END IF;
+END
+$$;
 
 CREATE INDEX IF NOT EXISTS route_stops_location_idx ON route_stops(location_id);
 
